@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+# start with python .\demo.py -e
 
 import argparse
+import cv2
 from MovenetRenderer import MovenetRenderer
 
 
@@ -23,6 +25,10 @@ parser.add_argument('--internal_frame_height', type=int, default=640,
                     help="Internal color camera frame height in pixels (default=%(default)i)")          
 parser.add_argument("-o","--output",
                     help="Path to output video file")
+parser.add_argument("-st","--stream", action="store_true",                                                                                    
+                    help="Stream image instead of showing locally")    
+parser.add_argument("-d","--depth", action="store_true",                                                                                    
+                    help="Display depth image instead of color image")    
 
     
 args = parser.parse_args()
@@ -43,14 +49,17 @@ pose = MovenetDepthai(input_src=args.input,
 
 renderer = MovenetRenderer(
                 pose, 
-                output=args.output)
+                output=args.output,
+                stream=args.stream,
+                depth=args.depth)
 
 while True:
     # Run movenet on next frame
     frame, body = pose.next_frame()
     if frame is None: break
     # Draw 2d skeleton
-    frame = renderer.draw(frame, body)
+    # TODO: Move to MovenetRenderer.py
+    frame = renderer.draw(cv2.blur(frame, (30, 30)), body) 
     key = renderer.waitKey(delay=1)
     if key == 27 or key == ord('q'):
         break
