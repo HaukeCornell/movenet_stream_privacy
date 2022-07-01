@@ -1,6 +1,6 @@
 import cv2
 import numpy as np
-import imagezmq
+
 
 
 # LINES_*_BODY are used when drawing the skeleton onto the source image. 
@@ -11,13 +11,12 @@ LINES_BODY = [[4,2],[2,0],[0,1],[1,3],
                 [10,8],[8,6],[6,5],[5,7],[7,9],
                 [6,12],[12,11],[11,5],
                 [12,14],[14,16],[11,13],[13,15]]
-sender = imagezmq.ImageSender()
+
 
 
 class MovenetRenderer:
     def __init__(self,
                 pose,
-                output=None,
                 stream=False,
                 depth=False):
         self.pose = pose
@@ -26,15 +25,9 @@ class MovenetRenderer:
         self.show_fps = True
         self.show_crop = False
 
-        if output is None:
-            self.output = None
-        else:
-            fourcc = cv2.VideoWriter_fourcc(*"MJPG")
-            self.output = cv2.VideoWriter(output,fourcc,pose.video_fps,(pose.img_w, pose.img_h))
-
     def draw(self, frame, body):
         self.frame = frame
-        #self.frame = cv2.blur(frame, (30, 30))
+ 
         lines = [np.array([body.keypoints[point] for point in line]) for line in LINES_BODY if body.scores[line[0]] > self.pose.score_thresh and body.scores[line[1]] > self.pose.score_thresh]
         
         cv2.polylines(frame, lines, False, (255, 180, 90), 2, cv2.LINE_AA)
@@ -54,20 +47,11 @@ class MovenetRenderer:
 
         return frame
 
-    def exit(self):
-        if self.output:
-            self.output.release()
+
 
     def waitKey(self, delay=1):
         if self.show_fps:
                 self.pose.fps.draw(self.frame, orig=(50,50), size=1, color=(240,180,100))
-        cv2.imshow("Movenet local", self.frame)
-
-        if self.stream:
-            sender.send_image("Movenet remote", self.frame)
-
-        if self.output:
-            self.output.write(self.frame)
         key = cv2.waitKey(delay) 
         if key == 32:
             # Pause on space bar

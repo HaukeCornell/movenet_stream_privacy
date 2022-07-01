@@ -3,8 +3,11 @@
 
 import argparse
 import cv2
-from MovenetRenderer import MovenetRenderer
+from zmq import Frame
+from MovenetRenderer import MovenetRenderer  
+from flask import Flask, render_template, Response
 
+app = Flask(__name__)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-e", "--edge", action="store_true",
@@ -49,19 +52,48 @@ pose = MovenetDepthai(input_src=args.input,
 
 renderer = MovenetRenderer(
                 pose, 
-                output=args.output,
                 stream=args.stream,
                 depth=args.depth)
 
-while True:
-    # Run movenet on next frame
-    frame, body = pose.next_frame()
-    if frame is None: break
-    # Draw 2d skeleton
-    # TODO: Move to MovenetRenderer.py
-    frame = renderer.draw(cv2.blur(frame, (30, 30)), body) 
-    key = renderer.waitKey(delay=1)
-    if key == 27 or key == ord('q'):
-        break
+
+@app.route('/')
+def index():
+    """Video streaming home page."""
+    return render_template('index.html')
+
+def gen():
+    while True:
+
+        # movenet
+        # Run movenet on next frame
+        frame, body = pose.next_frame()
+        frame =  renderer.draw(cv2.blur(frame, (30, 30)), body) 
+
+        encoded_frame = cv2.imencode('.jpg', frame)[1].tobytes()
+            
+     
+        # if frame is None: break
+        # Draw 2d skeleton
+
+        # key = renderer.waitKey(delay=1)
+        # if key == 27 or key == ord('q'):
+        #     break
+        # cv2.imshow("Movenet local", frame)
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + encoded_frame + b'\r\n')
+
+
+@app.route('/video_feed')
+def video_feed():
+    """Video streaming route. Put this in the src attribute of an img tag."""
+    return Response(gen(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', threaded=True)
+
+
 renderer.exit()
 pose.exit()

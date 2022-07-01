@@ -239,7 +239,7 @@ class MovenetDepthai:
             cam.setInterleaved(False)
             cam.setIspScale(self.scale_nd[0], self.scale_nd[1])
             cam.setFps(self.internal_fps)
-            cam.setBoardSocket(dai.CameraBoardSocket.LEFT)
+            cam.setBoardSocket(dai.CameraBoardSocket.RGB)
             cam.setColorOrder(dai.ColorCameraProperties.ColorOrder.RGB)
             if self.crop:
                 cam.setVideoSize(self.frame_size, self.frame_size)
