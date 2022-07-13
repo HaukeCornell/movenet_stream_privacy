@@ -3,9 +3,10 @@
 
 import argparse
 import cv2
-from zmq import Frame
 from MovenetRenderer import MovenetRenderer  
 from flask import Flask, render_template, Response
+import numpy as np
+
 
 app = Flask(__name__)
 
@@ -28,8 +29,17 @@ parser.add_argument('--internal_frame_height', type=int, default=640,
                     help="Internal color camera frame height in pixels (default=%(default)i)")          
 parser.add_argument("-o","--output",
                     help="Path to output video file")
-parser.add_argument("-st","--stream", action="store_true",                                                                                    
-                    help="Stream image instead of showing locally")    
+
+### Custom arguments ###
+parser.add_argument("-bl","--blur", action="store_true",                                                                                    
+                    help="Blur image")    
+parser.add_argument("-pe","--peek", action="store_true",                                                                                    
+                    help="Peek and show image without blur")    
+parser.add_argument("-ma","--mask", action="store_true",                                                                                    
+                    help="Mask image")          
+parser.add_argument("-bli","--blind", action="store_true",                                                                                    
+                    help="Do not display an image")    
+# TODO: depth
 parser.add_argument("-d","--depth", action="store_true",                                                                                    
                     help="Display depth image instead of color image")    
 
@@ -52,8 +62,28 @@ pose = MovenetDepthai(input_src=args.input,
 
 renderer = MovenetRenderer(
                 pose, 
-                stream=args.stream,
                 depth=args.depth)
+
+blur = args.blur
+peek = args.peek
+mask = args.mask
+blind = args.blind
+
+def draw_gradient_alpha_rectangle(frame, rectangle_position, rotate):
+    (xMin, yMin), (xMax, yMax) = rectangle_position
+    color = np.array((0,0,0), np.uint8)[np.newaxis, :]
+    mask1 = np.rot90(np.repeat(np.tile(np.linspace(1, 0, (rectangle_position[1][1]-rectangle_position[0][1])), ((rectangle_position[1][0]-rectangle_position[0][0]), 1))[:, :, np.newaxis], 3, axis=2), rotate) 
+    frame[yMin:yMax, xMin:xMax, :] = mask1 * frame[yMin:yMax, xMin:xMax, :] + (1-mask1) * color
+
+    return frame
+
+def draw_black_rectangle(frame,x,y,w,h):
+    start_point = ((int(frame.shape[0]*x)), (int(frame.shape[1]*y)))
+    end_point = ((int(frame.shape[0]*x+frame.shape[0]*w)), (int(frame.shape[1]*y+frame.shape[1]*h)))
+    color = (0, 0, 0)
+    thickness = -1
+    frame = cv2.rectangle(frame, start_point, end_point, color, thickness)
+    return frame
 
 
 @app.route('/')
@@ -67,18 +97,20 @@ def gen():
         # movenet
         # Run movenet on next frame
         frame, body = pose.next_frame()
-        frame =  renderer.draw(cv2.blur(frame, (30, 30)), body) 
 
+        if blur:
+            frame =  renderer.draw(cv2.blur(frame, (30, 30)), body) 
+        elif peek:
+            frame =  renderer.draw(frame, body) 
+        elif mask:
+            frame = draw_gradient_alpha_rectangle(frame,((0, 0), (int(frame.shape[1]*1.0), int(frame.shape[0]*0.4))), 1)
+            frame = draw_black_rectangle(frame, 0.2,0.1, 0.2,0.4)
+        elif blind:
+            break
         encoded_frame = cv2.imencode('.jpg', frame)[1].tobytes()
             
      
-        # if frame is None: break
-        # Draw 2d skeleton
-
-        # key = renderer.waitKey(delay=1)
-        # if key == 27 or key == ord('q'):
-        #     break
-        # cv2.imshow("Movenet local", frame)
+        if frame is None: break
 
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + encoded_frame + b'\r\n')
@@ -94,6 +126,7 @@ def video_feed():
 if __name__ == '__main__':
     app.run(host='0.0.0.0', threaded=True)
 
-
+# TODO: Close from browser
 renderer.exit()
 pose.exit()
+exit()

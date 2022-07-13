@@ -17,10 +17,8 @@ LINES_BODY = [[4,2],[2,0],[0,1],[1,3],
 class MovenetRenderer:
     def __init__(self,
                 pose,
-                stream=False,
                 depth=False):
         self.pose = pose
-        self.stream = stream
         # Rendering flags
         self.show_fps = True
         self.show_crop = False
