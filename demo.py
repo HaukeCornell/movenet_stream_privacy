@@ -4,7 +4,7 @@
 import argparse
 import cv2
 from MovenetRenderer import MovenetRenderer  
-from flask import Flask, render_template, Response
+from flask import Flask, render_template, Response, request, json
 import numpy as np
 
 
@@ -115,6 +115,23 @@ def gen():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + encoded_frame + b'\r\n')
 
+@app.route('/', methods=['POST','GET'])
+def hello_world():
+   
+    data = json.loads(request.get_data())
+    
+    global blur
+    global peek
+
+    if data['camera'] == "open":
+        blur = False
+        peek = True 
+        print("open")
+    elif data['camera'] == "blur":
+        blur = True
+        peek = False 
+        print("blur")
+    return 'JSON posted'
 
 @app.route('/video_feed')
 def video_feed():

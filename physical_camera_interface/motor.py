@@ -11,9 +11,32 @@ import RPi.GPIO as GPIO
 import sys
 
 line = sys.stdin.readline().strip()
-destination = line.split('_')[0]
-direction = line.split('_')[1]
+if line.__contains__("READ_CONTINOUSLY"):
+    READ_CONTINOUSLY = True
+    destination = 0
+    direction = 0
     
+else: 
+    READ_CONTINOUSLY = False
+    destination = line.split('_')[0]
+    direction = line.split('_')[1]
+    
+#GPIO.setmode(GPIO.BOARD)
+control_pins = [4,17,27,22]
+for pin in control_pins:
+    GPIO.setup(pin, GPIO.OUT)
+    GPIO.output(pin, 0)
+
+halfstep_seq = [
+    [1,0,0,0],
+    [1,1,0,0],
+    [0,1,0,0],
+    [0,1,1,0],
+    [0,0,1,0],
+    [0,0,1,1],
+    [0,0,0,1],
+    [1,0,0,1]
+]
 
 print("Destination is {0} by turning {1}".format(
             destination, direction
@@ -26,10 +49,10 @@ sensor = adafruit_tcs34725.TCS34725(i2c)
 
 
 myColors = {
-    "BLOCKED" :     (438, 268, 216, 903),   # Red
-    "BLURRED" :   (309, 301, 216, 1024),   # Green  
-    "MASKED" :    (291, 289, 273, 1000),  # Blue 
-    "OPEN" :   (311, 250, 193, 794) # Black
+    "BLOCKED" :     (321, 149, 137, 615),   # Red
+    "BLURRED" :   (170, 183, 118, 493),   # Green  
+    "MASKED" :     (238, 236, 244, 740),  # Blue 
+    "OPEN" :   (182, 141, 111, 454) # Black
 }
 
 GPIO.setup(26, GPIO.OUT)  # PIN to disable RGB sensor LED
@@ -41,42 +64,65 @@ GPIO.setup(26, GPIO.OUT)  # PIN to disable RGB sensor LED
 sensor.gain = 60
 GPIO.output(26,True)
 
-MAX_STEPS = 512
-CONTINOUS_READ = False
+MAX_STEPS = 1024
 CURRENT_STEPS = 0
 STEP_CHUNK = 16
-DISTANCE_THRESHOLD = 50
+DISTANCE_THRESHOLD = 30
+WAIT_BETWEEN_STEPS = 0.005
+WAIT_BETWEEN_CHUNK = 1
 
-while MAX_STEPS > CURRENT_STEPS:
-    color_rgbc = sensor.color_raw
-    print("rgb{0}".format(
-                color_rgbc[:-1]
+if READ_CONTINOUSLY:
+    while True:
+        color_rgbc = sensor.color_raw
+        print("{0}".format(
+                color_rgbc
             ))
 
-    myTuple = myColors[destination]
-    if dist(myTuple[:-1], color_rgbc[:-1]) <= DISTANCE_THRESHOLD:
-        print("Reached destination!")
-        break
-
-    # for x in myColors:
-    #     myTuple = myColors[x]
-    #     if dist(myTuple[:-1], color_rgbc[:-1]) <= DISTANCE_THRESHOLD:
-    #         print(x) 
-
-
-    if CONTINOUS_READ:
-            time.sleep(1.0)    
-    else:
-        break
-
-for x in myColors:
-    if dist(myColors[x][:-1], color_rgbc[:-1]) <= 50:
-        print(x) 
-
-   
-
+        for x in myColors:
+            myTuple = myColors[x]
+            if myColors[x] == "OPEN":
+                distance = dist(myTuple, color_rgbc)
+            else: 
+                distance = dist(myTuple[:-1], color_rgbc[:-1])
+            if distance <= DISTANCE_THRESHOLD:
+                print(x, "\n ", distance) 
     
+        time.sleep(0.5)
+else:
+    while MAX_STEPS > CURRENT_STEPS:
+        color_rgbc = sensor.color_raw
+        print("rgb{0}".format(
+                    color_rgbc
+                ))
+
+        myTuple = myColors[destination]
+        if destination == "OPEN":
+            distance = dist(myTuple, color_rgbc)
+        else: 
+            distance = dist(myTuple[:-1], color_rgbc[:-1])
+        if distance <= DISTANCE_THRESHOLD:
+            print("Reached destination!")
+            break
+
+        if direction == "LEFT":
+            for i in range(STEP_CHUNK):
+                for halfstep in range(8):
+                    for pin in range(4):
+                        GPIO.output(control_pins[pin], halfstep_seq[halfstep][pin])
+                    time.sleep(WAIT_BETWEEN_STEPS)
+            
+
+        elif direction == "RIGHT":
+            for i in range(STEP_CHUNK):
+                for halfstep in reversed(range(8)):
+                    for pin in range(4):
+                        GPIO.output(control_pins[pin], halfstep_seq[halfstep][pin])
+                    time.sleep(WAIT_BETWEEN_STEPS)    
+
+        CURRENT_STEPS += STEP_CHUNK
+        time.sleep(WAIT_BETWEEN_CHUNK)    
+
 sensor.active = False
 GPIO.output(26,False)
-print("disabled")
+print("Disabled")
 
