@@ -69,6 +69,24 @@ peek = args.peek
 mask = args.mask
 blind = args.blind
 
+CAM = args.input
+
+pts_absolute = np.array([[0,0],[0,0],[0,0],[0,0]], np.int32)
+
+def update_trapezoid(pts_percent):
+
+    pts_adjustment_OAK = np.array([[11.52, 6.48],[11.52, 6.48],[11.52, 6.48],[11.52, 6.48]], np.half)
+    pts_adjustment_PI = np.array([[6.40, 4.80],[6.40, 4.80],[6.40, 4.80],[6.40, 4.80]], np.half)
+
+    if CAM == '0':
+        pts_multiplier = np.int_(np.multiply(pts_percent, pts_adjustment_PI))
+    elif CAM == 'rgb':
+        pts_multiplier = np.int_(np.multiply(pts_percent, pts_adjustment_OAK))
+
+    global pts_absolute
+    pts_absolute = pts_multiplier.reshape((-1,1,2))
+    print (pts_absolute)
+
 def draw_gradient_alpha_rectangle(frame, rectangle_position, rotate):
     (xMin, yMin), (xMax, yMax) = rectangle_position
     color = np.array((0,0,0), np.uint8)[np.newaxis, :]
@@ -107,6 +125,9 @@ def gen():
             frame = draw_black_rectangle(frame, 0.2,0.1, 0.2,0.4)
         elif blind:
             break
+
+        cv2.polylines(frame,[pts_absolute],True,(0,255,255))        
+        
         encoded_frame = cv2.imencode('.jpg', frame)[1].tobytes()
             
      
@@ -116,21 +137,29 @@ def gen():
                b'Content-Type: image/jpeg\r\n\r\n' + encoded_frame + b'\r\n')
 
 @app.route('/', methods=['POST','GET'])
-def hello_world():
+def post_get():
    
     data = json.loads(request.get_data())
     
     global blur
     global peek
 
-    if data['camera'] == "open":
-        blur = False
-        peek = True 
-        print("open")
-    elif data['camera'] == "blur":
-        blur = True
-        peek = False 
-        print("blur")
+    if "camera" in data:
+        if data['camera'] == "open":
+            blur = False
+            peek = True 
+            print("open")
+        elif data['camera'] == "blur":
+            blur = True
+            peek = False 
+            print("blur")
+    elif "1x" in data:
+        pts_node_red = np.array([[data['1x'],data['1y']],
+                                [data['2x'],data['2y']],
+                                [data['3x'],data['3y']],
+                                [data['4x'],data['4y']]], np.half)
+        update_trapezoid(pts_node_red)
+
     return 'JSON posted'
 
 @app.route('/video_feed')
@@ -141,6 +170,8 @@ def video_feed():
 
 
 if __name__ == '__main__':
+    pts_initial = np.array([[35,10],[65,10],[70,80],[30,80]], np.half)
+    update_trapezoid(pts_initial)
     app.run(host='0.0.0.0', threaded=True)
 
 # TODO: Close from browser
