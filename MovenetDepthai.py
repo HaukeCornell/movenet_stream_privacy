@@ -192,7 +192,8 @@ class MovenetDepthai:
                 input_type = "webcam"
                 input_src = int(input_src)
             self.cap = cv2.VideoCapture(input_src)
-            self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+            #self.video_fps = int(self.cap.get(cv2.CAP_PROP_FPS))
+            self.video_fps = 15
             self.img_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             self.img_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             print("Video FPS:", self.video_fps)
