@@ -12,8 +12,6 @@ LINES_BODY = [[4,2],[2,0],[0,1],[1,3],
                 [6,12],[12,11],[11,5],
                 [12,14],[14,16],[11,13],[13,15]]
 
-
-
 class MovenetRenderer:
     def __init__(self,
                 pose,
@@ -21,7 +19,7 @@ class MovenetRenderer:
         self.pose = pose
         # Rendering flags
         self.show_fps = True
-        self.show_crop = False
+        self.show_crop = True
 
     def draw(self, frame, body):
         self.frame = frame
@@ -45,17 +43,11 @@ class MovenetRenderer:
 
         return frame
 
-
-
-    def waitKey(self, delay=1):
-        if self.show_fps:
-                self.pose.fps.draw(self.frame, orig=(50,50), size=1, color=(240,180,100))
-        key = cv2.waitKey(delay) 
-        if key == 32:
-            # Pause on space bar
-            cv2.waitKey(0)
-        elif key == ord('f'):
-            self.show_fps = not self.show_fps
-        elif key == ord('c'):
-            self.show_crop = not self.show_crop
-        return key
+    def body_location(self, body, score_thresh):
+       
+        stacked_scores =  np.column_stack((body.scores, body.scores))
+        mask = np.ma.masked_where(stacked_scores < score_thresh, body.keypoints)
+        
+        average_point = np.ma.average(mask, axis=0)
+        return average_point
+        

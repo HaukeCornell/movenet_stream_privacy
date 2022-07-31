@@ -7,7 +7,8 @@ from MovenetRenderer import MovenetRenderer
 from flask import Flask, render_template, Response, request, json, stream_with_context
 import numpy as np
 from threading import Thread
-import time
+import polygon_test
+import requests
 
 app = Flask(__name__)
 
@@ -63,24 +64,29 @@ blur = True
 peek = False
 mask = False
 blind = False
-BackgroundPoseEnabled = args.background_pose
+
+SCORE_TRESH = 0.2
+WINDOW = 30
+body_location_queue = []
+body_is_there = False
 
 # visualization
 render_body = True
 render_trapezoid = True
 pts_absolute = np.array([[0,0],[0,0],[0,0],[0,0]], np.int32)
+background_pose_enabled = args.background_pose
 
 # input camera
-CAM = args.input
+input_camera = args.input
 
 def update_trapezoid(pts_percent):
 
     pts_adjustment_OAK = np.array([[11.52, 6.48],[11.52, 6.48],[11.52, 6.48],[11.52, 6.48]], np.half)
     pts_adjustment_PI = np.array([[6.40, 4.80],[6.40, 4.80],[6.40, 4.80],[6.40, 4.80]], np.half)
 
-    if CAM == '0':
+    if input_camera == '0':
         pts_multiplier = np.int_(np.multiply(pts_percent, pts_adjustment_PI))
-    elif CAM == 'rgb':
+    elif input_camera == 'rgb':
         pts_multiplier = np.int_(np.multiply(pts_percent, pts_adjustment_OAK))
 
     global pts_absolute
@@ -102,7 +108,6 @@ def draw_black_rectangle(frame,x,y,w,h):
     thickness = -1
     frame = cv2.rectangle(frame, start_point, end_point, color, thickness)
     return frame
-
 
 @app.route('/')
 def index():
@@ -150,19 +155,18 @@ def post_get():
                                 [data['4x'],data['4y']]], np.half)
         update_trapezoid(pts_node_red)
 
-
     return 'JSON posted'
 
 @app.route('/video_feed')
 def video_feed():
     def gen():
         try:
-            if BackgroundPoseEnabled:
+            if background_pose_enabled:
                 global t1
-                global BackgroundPoseRunning 
+                global background_pose_running 
 
-                if BackgroundPoseRunning:
-                    BackgroundPoseRunning = False
+                if background_pose_running:
+                    background_pose_running = False
                     t1.join()
 
             while True:
@@ -183,49 +187,73 @@ def video_feed():
                 if render_trapezoid:
                     cv2.polylines(frame,[pts_absolute],True,(0,255,255))        
                 
+                location, body_presence = body_presence_average(body)
+                check_trapezoid(location, body_presence)
+
+                if (body_presence > 0.1):
+                    cv2.circle(frame, (int(location[0]), int(location[1])), int(8 * body_presence), (192,136,189), -11)
+                
+                                
                 encoded_frame = cv2.imencode('.jpg', frame)[1].tobytes()
-                #print (time.time())
                     
                 yield (b'--frame\r\n'
                     b'Content-Type: image/jpeg\r\n\r\n' + encoded_frame + b'\r\n')
         except GeneratorExit:
             print('closed')
-            if BackgroundPoseEnabled and not BackgroundPoseRunning:
-                BackgroundPoseRunning = True
-                t1 = Thread(target=BackgroundPose)
+            if background_pose_enabled and not background_pose_running:
+                background_pose_running = True
+                t1 = Thread(target=background_pose)
                 t1.start()
 
-    """Video streaming route. Put this in the src attribute of an img tag."""
     return Response(stream_with_context(gen()),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
+def body_presence_average(body):
+    body_location_queue.append(renderer.body_location(body,SCORE_TRESH))
 
-def BackgroundPose ():
+    if (len(body_location_queue) == WINDOW):
+        body_location_queue.pop(0)
+        location = np.ma.average(body_location_queue, axis=0)
+        body_presence = np.ma.count(body_location_queue) / WINDOW
+        return location, body_presence
+    else:
+        return np.NaN, 0.0
 
-    while BackgroundPoseRunning:
-        frame, body = pose.next_frame()
-        # TODO: add background processing here
-        print (body)
+def check_trapezoid(location, body_presence):
+    if (body_presence > 0.9):
+        global body_is_there
+        if (polygon_test.is_within_polygon(pts_absolute,location) and not body_is_there):
+            # body_location_queue.clear()
+            print("body there")
+            requests.post('http://localhost:1880/body', json = {'body': 'is_there'})
+            body_is_there = True
+        elif (body_is_there and not polygon_test.is_within_polygon(pts_absolute,location)):
+            # body_location_queue.clear()
+            print("body not there")
+            requests.post('http://localhost:1880/body', json = {'body': 'not_there'})
+            body_is_there = False
 
+def background_pose ():
 
+    while background_pose_running:
+        _, body = pose.next_frame()
+        location, body_presence = body_presence_average(body)
+        check_trapezoid(location, body_presence)
+        
 if __name__ == '__main__':
-    pts_initial = np.array([[35,10],[65,10],[70,80],[30,80]], np.half)
+    pts_initial = [[np.array([[35,10],[65,10],[70,80],[30,80]], np.half)]]
     update_trapezoid(pts_initial)
 
-    if (BackgroundPoseEnabled):
+    if (background_pose_enabled):
         
         global t1
-        global BackgroundPoseRunning 
-        BackgroundPoseRunning = True
+        global background_pose_running 
+        background_pose_running = True
         
-        t1 = Thread(target=BackgroundPose)
+        t1 = Thread(target=background_pose)
         t1.start()
     
     app.run(host='0.0.0.0', threaded=True)
 
-    
-
-# TODO: Close from browser
-renderer.exit()
 pose.exit()
 exit()
