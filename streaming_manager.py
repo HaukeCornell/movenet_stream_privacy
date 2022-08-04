@@ -65,7 +65,7 @@ peek = False
 mask = False
 blind = False
 
-SCORE_TRESH = 0.2
+SCORE_TRESH = 0.5
 WINDOW = 30
 body_location_queue = []
 body_is_there = False
@@ -119,7 +119,7 @@ def post_get():
    
     data = json.loads(request.get_data())
     
-    global blur, peek, render_body, render_trapezoid
+    global blur, peek, render_body, render_trapezoid, SCORE_TRESH
 
     if "camera" in data:
         if data['camera'] == "open":
@@ -148,6 +148,11 @@ def post_get():
             render_trapezoid = True
         elif data['visualization'] == "trapezoid_off":
             render_trapezoid = False
+
+    elif "threshold" in data:
+        SCORE_TRESH = float(data['threshold'])
+        print (f' updated treshold {SCORE_TRESH}')
+        
     elif "1x" in data:
         pts_node_red = np.array([[data['1x'],data['1y']],
                                 [data['2x'],data['2y']],
