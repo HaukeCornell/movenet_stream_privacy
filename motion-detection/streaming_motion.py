@@ -9,6 +9,7 @@ from flask import Flask, render_template, Response, request, json, stream_with_c
 from threading import Thread
 import requests
 
+# from https://github.com/bwsw/rt-motion-detection-opencv-python/blob/master/setup.py
 
 app = Flask(__name__)
 
@@ -18,10 +19,10 @@ background_motion_enabled = True
 
 detector = MotionDetector(bg_history=10,
                         bg_skip_frames=1,
-                        movement_frames_history=2,
-                        brightness_discard_level=5,
+                        movement_frames_history=5,
+                        brightness_discard_level=20,
                         bg_subs_scale_percent=0.2,
-                        pixel_compression_ratio=0.1,
+                        pixel_compression_ratio=0.05,
                         group_boxes=True,
                         expansion_step=5)
 
@@ -46,6 +47,7 @@ def background_motion ():
     res = []
     fc = dict()
     ctr = 0
+    time.sleep(4)
 
     while background_motion_running:
         ret, frame = cap.read()
@@ -53,9 +55,7 @@ def background_motion ():
             break
 
         begin = time.time()
-
-        
-
+        frame = frame[int(pts_absolute.item(1)):int(pts_absolute.item(7)), int(pts_absolute.item(6)):int(pts_absolute.item(4))]
         boxes, frame = detector.detect(frame)
         results = []
         if boxes:
@@ -124,9 +124,6 @@ def video_feed():
                     t1.join()
             
             cap = cv2.VideoCapture(0)
-            
-            # cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-            # cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
 
             # group_boxes=True can be used if one wants to get less boxes, which include all overlapping boxes
 
@@ -139,10 +136,11 @@ def video_feed():
             while True:
                 # Capture frame-by-frame
                 ret, frame = cap.read()
-                # if frame is None:
-                #     break
+                if frame is None:
+                    break
 
                 begin = time.time()
+                frame = frame[int(pts_absolute.item(1)):int(pts_absolute.item(7)), int(pts_absolute.item(6)):int(pts_absolute.item(4))]
 
                 boxes, frame = detector.detect(frame)
                 # boxes hold all boxes around motion parts
@@ -154,7 +152,6 @@ def video_feed():
                 if boxes:
                     results, box_map = pack_images(frame=frame, boxes=boxes, width=b_width, height=b_height,
                                                     box_filter=filter_fun)
-                    # box_map holds list of mapping between image placement in packed bins and original boxes
 
                 ## end
 
@@ -169,31 +166,20 @@ def video_feed():
                 if len(res) > 10000:
                     res = []
 
-                # idx = 0
-                # for r in results:
-                #      idx += 1
-                #      cv2.imshow('packed_frame_%d' % idx, r)
-
                 ctr += 1
                 nc = len(results)
                 if nc in fc:
                     fc[nc] += 1
                 else:
                     fc[nc] = 0
+                # cv2.polylines(frame,[pts_absolute],True,(0,255,255))  
 
-                # cv2.imshow('last_frame', frame)
-                # cv2.imshow('detect_frame', detector.detection_boxed)
-                # cv2.imshow('diff_frame', detector.color_movement)
-                cv2.polylines(frame,[pts_absolute],True,(0,255,255))  
+                upscaled_movement  = cv2.resize(detector.color_movement, None, fx= 3, fy= 3, interpolation= cv2.INTER_LINEAR)
                 h1, w1 = frame.shape[:2]
-                h2, w2 = detector.color_movement.shape[:2]
-
-                #create empty matrix
+                h2, w2 = upscaled_movement.shape[:2]
                 vis = np.zeros((max(h1, h2), w1+w2,3), np.uint8)
-
-                #combine 2 images
                 vis[:h1, :w1,:3] = frame
-                vis[:h2, w1:w1+w2,:3] = detector.color_movement
+                vis[:h2, w1:w1+w2,:3] = upscaled_movement
 
                 encoded_frame = cv2.imencode('.jpg', vis)[1].tobytes()
               
