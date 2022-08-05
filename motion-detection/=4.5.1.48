@@ -1,0 +1,7 @@
+Looking in indexes: https://pypi.org/simple, https://www.piwheels.org/simple
+Collecting opencv-python
+  Using cached opencv_python-4.6.0.66-cp36-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (39.5 MB)
+Collecting numpy>=1.19.3
+  Using cached numpy-1.23.1-cp39-cp39-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (13.9 MB)
+Installing collected packages: numpy, opencv-python
+Successfully installed numpy-1.23.1 opencv-python-4.6.0.66
